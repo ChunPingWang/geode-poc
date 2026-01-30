@@ -4,13 +4,104 @@
 
 ## 目錄
 
+- [專案狀態](#專案狀態)
+- [功能涵蓋範圍](#功能涵蓋範圍)
 - [關於 Apache Geode](#關於-apache-geode)
 - [系統架構](#系統架構)
 - [專案結構](#專案結構)
 - [快速開始](#快速開始)
 - [API 參考](#api-參考)
 - [測試案例](#測試案例)
+- [進階功能](#進階功能)
 - [效能指標](#效能指標)
+
+---
+
+## 專案狀態
+
+```mermaid
+pie title 功能實作進度
+    "已完成" : 8
+    "進行中" : 0
+    "未開始" : 0
+```
+
+| 狀態 | 說明 |
+|------|------|
+| ✅ 已完成 | 功能已實作並測試通過 |
+| 🔄 進行中 | 功能開發中 |
+| ⏳ 待開發 | 尚未開始 |
+
+### 實作狀態總覽
+
+| 功能 | 狀態 | 說明 |
+|------|------|------|
+| 基本 CRUD 操作 | ✅ 已完成 | Customer 和 Account 的新增、讀取、更新、刪除 |
+| 帳戶操作 | ✅ 已完成 | 存款、提款、轉帳功能 |
+| 故障轉移 | ✅ 已完成 | PARTITION_REDUNDANT Region 確保零資料遺失 |
+| ACID 交易 | ✅ 已完成 | 使用 CacheTransactionManager 實現分散式交易 |
+| 持續查詢 (CQ) | ✅ 已完成 | 即時監控帳戶餘額變更並產生警示 |
+| 磁碟持久化 | ✅ 已完成 | PARTITION_REDUNDANT_PERSISTENT Region |
+| Prometheus 監控 | ✅ 已完成 | 整合 Micrometer + Prometheus + Grafana |
+| WAN 複製 | ✅ 已完成 | 雙站點 (台灣/日本) 雙向資料複製 |
+
+---
+
+## 功能涵蓋範圍
+
+本 PoC 涵蓋 Apache Geode 的主要企業級功能：
+
+```mermaid
+mindmap
+  root((Apache Geode PoC))
+    資料管理
+      CRUD 操作
+      Region 類型
+        PARTITION
+        PARTITION_REDUNDANT
+        PARTITION_REDUNDANT_PERSISTENT
+      PDX 序列化
+    高可用性
+      故障轉移
+      資料冗餘
+      自動恢復
+    交易處理
+      ACID 交易
+      分散式鎖
+      衝突偵測
+    事件驅動
+      持續查詢 CQ
+      事件監聽器
+      即時警示
+    持久化
+      磁碟儲存
+      寫入日誌
+      資料恢復
+    多站點
+      WAN 複製
+      Gateway Sender
+      Gateway Receiver
+    可觀測性
+      Prometheus 指標
+      Grafana 儀表板
+      JVM 監控
+```
+
+### 與 Apache Geode 官方功能對照
+
+| Apache Geode 功能 | 本 PoC 實作 | 說明 |
+|------------------|-------------|------|
+| **In-Memory Data Grid** | ✅ | 使用 PARTITION_REDUNDANT Region |
+| **Distributed Caching** | ✅ | Spring Data Geode Repository |
+| **ACID Transactions** | ✅ | CacheTransactionManager |
+| **Continuous Query (CQ)** | ✅ | AccountBalanceCqListener |
+| **WAN Replication** | ✅ | 雙向 Gateway Sender/Receiver |
+| **Persistence** | ✅ | disk-store 配置 |
+| **PDX Serialization** | ✅ | @PdxSerializer 註解 |
+| **OQL Query** | ✅ | Spring Data Repository 查詢 |
+| **Function Execution** | ⏳ | 未實作 (可擴展) |
+| **Security** | ⏳ | 未實作 (可擴展) |
+| **Lucene Integration** | ⏳ | 未實作 (可擴展) |
 
 ---
 
@@ -182,35 +273,69 @@ stateDiagram-v2
 
 ```
 geode-poc/
-├── Apache_Geode_PoC_Workplan.md    # 詳細工作計畫
-├── docker-compose.yaml              # Geode 叢集設定
-├── README.md                        # 本文件
+├── README.md                           # 本文件
+├── Apache_Geode_PoC_Workplan.md        # 詳細工作計畫
 │
-├── geode-demo-app/                  # Spring Boot 應用程式
+├── docker-compose.yaml                 # 基本 Geode 叢集
+├── docker-compose-persistent.yaml      # 帶持久化的叢集
+├── docker-compose-full.yaml            # 完整監控堆疊
+├── docker-compose-wan.yaml             # WAN 複製雙叢集
+│
+├── monitoring/                         # 監控配置
+│   ├── prometheus.yml                  # Prometheus 抓取配置
+│   └── grafana-dashboard.json          # Grafana 儀表板
+│
+├── scripts/                            # 測試腳本
+│   └── test-wan-replication.sh         # WAN 複製測試
+│
+├── geode-demo-app/                     # Spring Boot 應用程式
 │   ├── Dockerfile
 │   ├── pom.xml
 │   └── src/main/java/com/example/geodedemo/
 │       ├── GeodeDemoApplication.java
+│       │
 │       ├── config/
-│       │   └── GeodeConfig.java
-│       ├── entity/
+│       │   └── GeodeConfig.java        # Geode 客戶端配置
+│       │
+│       ├── entity/                     # 資料實體
 │       │   ├── Customer.java
 │       │   └── Account.java
-│       ├── repository/
+│       │
+│       ├── repository/                 # 資料存取層
 │       │   ├── CustomerRepository.java
 │       │   └── AccountRepository.java
-│       ├── service/
+│       │
+│       ├── service/                    # 業務邏輯層
 │       │   ├── CustomerService.java
-│       │   └── AccountService.java
-│       ├── controller/
+│       │   ├── AccountService.java
+│       │   └── TransactionService.java # ACID 交易服務
+│       │
+│       ├── controller/                 # REST API 控制器
 │       │   ├── CustomerController.java
 │       │   ├── AccountController.java
-│       │   └── HealthController.java
-│       └── exception/
+│       │   ├── HealthController.java
+│       │   ├── TransactionController.java
+│       │   ├── ContinuousQueryController.java
+│       │   └── WanController.java
+│       │
+│       ├── cq/                         # 持續查詢模組
+│       │   ├── AccountBalanceCqListener.java
+│       │   ├── BalanceChangeEvent.java
+│       │   ├── ContinuousQueryService.java
+│       │   └── EventStore.java
+│       │
+│       ├── wan/                        # WAN 複製模組
+│       │   ├── WanReplicationInfo.java
+│       │   └── WanReplicationService.java
+│       │
+│       ├── metrics/                    # 監控指標
+│       │   └── GeodeMetricsService.java
+│       │
+│       └── exception/                  # 例外處理
 │           ├── ResourceNotFoundException.java
 │           └── GlobalExceptionHandler.java
 │
-└── k8s/                             # Kubernetes 部署檔
+└── k8s/                                # Kubernetes 部署檔 (可選)
     ├── base/
     │   └── kind-config.yaml
     └── geode/
@@ -954,6 +1079,257 @@ docker exec geode-server-site-b gfsh \
 - [Spring Data Geode](https://spring.io/projects/spring-data-geode)
 - [Geode GitHub 儲存庫](https://github.com/apache/geode)
 - [Geode WAN 複製指南](https://geode.apache.org/docs/guide/115/topologies_and_comm/multi_site_configuration/chapter_overview.html)
+
+---
+
+## 場景說明
+
+### 場景 1：分散式快取與 CRUD 操作
+
+**問題**：傳統資料庫在高併發場景下延遲高、吞吐量受限。
+
+**解決方案**：使用 Apache Geode 作為分散式記憶體快取層。
+
+```mermaid
+graph LR
+    subgraph 傳統架構
+        A1[應用程式] -->|每次查詢| DB1[(資料庫)]
+    end
+
+    subgraph Geode 架構
+        A2[應用程式] -->|快取命中| G[Geode Cache]
+        G -.->|快取未命中| DB2[(資料庫)]
+    end
+
+    style G fill:#4CAF50
+```
+
+**實作重點**：
+- 使用 Spring Data Geode Repository 簡化資料存取
+- `@Region` 註解定義資料儲存區域
+- PDX 序列化確保跨語言相容性
+
+---
+
+### 場景 2：高可用性與故障轉移
+
+**問題**：單點故障導致服務中斷和資料遺失。
+
+**解決方案**：使用 PARTITION_REDUNDANT Region 確保資料冗餘。
+
+```mermaid
+graph TB
+    subgraph 正常狀態
+        S1[Server 1<br/>Primary: A, C<br/>Backup: B, D]
+        S2[Server 2<br/>Primary: B, D<br/>Backup: A, C]
+        S1 <-->|同步| S2
+    end
+
+    subgraph Server 1 故障
+        S1X[Server 1 ❌]
+        S2OK[Server 2<br/>Primary: A, B, C, D]
+        style S1X fill:#ff6b6b
+        style S2OK fill:#4CAF50
+    end
+```
+
+**測試結果**：
+- 停止 Server 1 後，所有資料仍可透過 Server 2 存取
+- 故障轉移時間 < 10 秒
+- 零資料遺失
+
+---
+
+### 場景 3：ACID 分散式交易
+
+**問題**：跨帳戶轉帳需要原子性操作，避免資金不一致。
+
+**解決方案**：使用 Geode CacheTransactionManager 實現分散式 ACID 交易。
+
+```mermaid
+sequenceDiagram
+    participant App as 應用程式
+    participant TxMgr as 交易管理器
+    participant AccA as 帳戶 A
+    participant AccB as 帳戶 B
+
+    App->>TxMgr: begin()
+    TxMgr->>AccA: 扣款 $1000
+    TxMgr->>AccB: 存款 $1000
+
+    alt 所有操作成功
+        TxMgr->>TxMgr: commit()
+        TxMgr-->>App: 成功
+    else 任一操作失敗
+        TxMgr->>TxMgr: rollback()
+        Note over AccA,AccB: 所有變更還原
+        TxMgr-->>App: 失敗
+    end
+```
+
+**實作重點**：
+- `TransactionService.transferWithTransaction()` 實現原子轉帳
+- 自動偵測衝突並回滾
+- 支援批次更新操作
+
+---
+
+### 場景 4：即時事件通知 (Continuous Query)
+
+**問題**：需要即時監控帳戶餘額變化並發送警示。
+
+**解決方案**：使用 Geode 持續查詢 (CQ) 訂閱資料變更事件。
+
+```mermaid
+graph TB
+    subgraph Geode 叢集
+        R[/Accounts Region/]
+        CQ[CQ: SELECT * FROM /Accounts]
+    end
+
+    subgraph 事件處理
+        L[AccountBalanceCqListener]
+        ES[EventStore]
+    end
+
+    subgraph 警示類型
+        A1[LOW_BALANCE<br/>餘額 < $100]
+        A2[LARGE_TRANSACTION<br/>變動 > $1000]
+    end
+
+    R -->|資料變更| CQ
+    CQ -->|事件| L
+    L -->|儲存| ES
+    L -->|判斷| A1
+    L -->|判斷| A2
+```
+
+**警示閾值**：
+| 警示類型 | 閾值 | 說明 |
+|---------|------|------|
+| LOW_BALANCE | < $100 | 餘額過低警告 |
+| LARGE_TRANSACTION | > $1000 | 大額交易通知 |
+
+---
+
+### 場景 5：資料持久化
+
+**問題**：記憶體資料在重啟後遺失。
+
+**解決方案**：配置 disk-store 將資料持久化到磁碟。
+
+```mermaid
+graph LR
+    subgraph 寫入流程
+        W[寫入操作] --> M[記憶體]
+        M --> D[磁碟]
+    end
+
+    subgraph 恢復流程
+        D2[磁碟] --> M2[記憶體]
+        M2 --> R[服務就緒]
+    end
+
+    style M fill:#4CAF50
+    style D fill:#2196F3
+```
+
+**配置**：
+```yaml
+# docker-compose-persistent.yaml
+--type=PARTITION_REDUNDANT_PERSISTENT
+--disk-store=geode-disk-store
+```
+
+---
+
+### 場景 6：跨資料中心複製 (WAN Replication)
+
+**問題**：需要在多個地理位置部署，實現災難復原。
+
+**解決方案**：使用 Geode WAN 複製在多個站點間同步資料。
+
+```mermaid
+graph TB
+    subgraph Taiwan[台灣站點 DS-ID: 1]
+        LT[Locator]
+        ST[Server]
+        GST[Gateway Sender<br/>→ Japan]
+        GRT[Gateway Receiver]
+    end
+
+    subgraph Japan[日本站點 DS-ID: 2]
+        LJ[Locator]
+        SJ[Server]
+        GSJ[Gateway Sender<br/>→ Taiwan]
+        GRJ[Gateway Receiver]
+    end
+
+    GST -.->|非同步複製| GRJ
+    GSJ -.->|非同步複製| GRT
+
+    style Taiwan fill:#e3f2fd
+    style Japan fill:#fff3e0
+```
+
+**複製模式**：
+- **Active-Active**：兩站點都可讀寫
+- **非同步複製**：不影響本地寫入效能
+- **衝突解決**：使用時間戳記
+
+---
+
+### 場景 7：可觀測性與監控
+
+**問題**：需要即時監控系統健康狀態和效能指標。
+
+**解決方案**：整合 Prometheus + Grafana 監控堆疊。
+
+```mermaid
+graph LR
+    subgraph 應用程式
+        App[Spring Boot]
+        Metrics[Micrometer]
+        App --> Metrics
+    end
+
+    subgraph 監控堆疊
+        P[Prometheus<br/>:9090]
+        G[Grafana<br/>:3000]
+    end
+
+    Metrics -->|/actuator/prometheus| P
+    P --> G
+
+    style P fill:#E6522C
+    style G fill:#F46800
+```
+
+**監控指標**：
+
+| 指標類別 | 指標名稱 | 說明 |
+|---------|---------|------|
+| Region | `geode_region_size` | 資料筆數 |
+| 交易 | `geode_transactions_total` | 交易總數 |
+| 交易 | `geode_transactions_failed` | 失敗交易數 |
+| 效能 | `geode_operation_duration_seconds` | 操作延遲 |
+| CQ | `geode_cq_events_total` | CQ 事件數 |
+| JVM | `jvm_memory_used_bytes` | 記憶體使用 |
+
+---
+
+## 技術堆疊
+
+| 類別 | 技術 | 版本 |
+|------|------|------|
+| 分散式快取 | Apache Geode | 1.15.1 |
+| 應用框架 | Spring Boot | 2.7.18 |
+| 資料存取 | Spring Data Geode | 1.7.5 |
+| 監控 | Micrometer + Prometheus | latest |
+| 視覺化 | Grafana | latest |
+| 容器化 | Docker | 24.0+ |
+| 建置工具 | Maven | 3.9+ |
+| 執行環境 | Java | 17+ |
 
 ---
 
