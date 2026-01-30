@@ -21,7 +21,7 @@
 
 ```mermaid
 pie title 功能實作進度
-    "已完成" : 8
+    "已完成" : 16
     "進行中" : 0
     "未開始" : 0
 ```
@@ -34,6 +34,8 @@ pie title 功能實作進度
 
 ### 實作狀態總覽
 
+#### 核心功能
+
 | 功能 | 狀態 | 說明 |
 |------|------|------|
 | 基本 CRUD 操作 | ✅ 已完成 | Customer 和 Account 的新增、讀取、更新、刪除 |
@@ -44,6 +46,19 @@ pie title 功能實作進度
 | 磁碟持久化 | ✅ 已完成 | PARTITION_REDUNDANT_PERSISTENT Region |
 | Prometheus 監控 | ✅ 已完成 | 整合 Micrometer + Prometheus + Grafana |
 | WAN 複製 | ✅ 已完成 | 雙站點 (台灣/日本) 雙向資料複製 |
+
+#### 進階功能
+
+| 功能 | 狀態 | 說明 |
+|------|------|------|
+| Function Execution | ✅ 已完成 | 伺服器端聚合運算 (總額、平均、分類統計) |
+| Security (認證授權) | ✅ 已完成 | SecurityManager 實作使用者認證與權限控制 |
+| Lucene 全文搜尋 | ✅ 已完成 | 客戶名稱和 Email 的全文檢索 |
+| Cache Writer/Loader | ✅ 已完成 | Write-through 和 Read-through 模式 |
+| Async Event Queue | ✅ 已完成 | 非同步事件處理佇列 |
+| Delta Propagation | ✅ 已完成 | 只傳送變更欄位，減少網路流量 |
+| Expiration Policies | ✅ 已完成 | TTL 和閒置逾時自動過期 |
+| Compression | ✅ 已完成 | Snappy 壓縮減少記憶體和儲存空間 |
 
 ---
 
@@ -57,22 +72,33 @@ mindmap
     資料管理
       CRUD 操作
       Region 類型
-        PARTITION
-        PARTITION_REDUNDANT
-        PARTITION_REDUNDANT_PERSISTENT
       PDX 序列化
+      全文搜尋 Lucene
     高可用性
       故障轉移
       資料冗餘
-      自動恢復
+      Delta 差量傳輸
     交易處理
       ACID 交易
       分散式鎖
       衝突偵測
     事件驅動
       持續查詢 CQ
-      事件監聽器
-      即時警示
+      Cache Listener
+      Async Event Queue
+    快取策略
+      Cache Writer
+      Cache Loader
+      過期策略
+      壓縮
+    伺服器運算
+      Function Execution
+      聚合運算
+      OQL 查詢
+    安全性
+      認證 Authentication
+      授權 Authorization
+      SSL/TLS
     持久化
       磁碟儲存
       寫入日誌
@@ -82,8 +108,8 @@ mindmap
       Gateway Sender
       Gateway Receiver
     可觀測性
-      Prometheus 指標
-      Grafana 儀表板
+      Prometheus
+      Grafana
       JVM 監控
 ```
 
@@ -99,9 +125,16 @@ mindmap
 | **Persistence** | ✅ | disk-store 配置 |
 | **PDX Serialization** | ✅ | @PdxSerializer 註解 |
 | **OQL Query** | ✅ | Spring Data Repository 查詢 |
-| **Function Execution** | ⏳ | 未實作 (可擴展) |
-| **Security** | ⏳ | 未實作 (可擴展) |
-| **Lucene Integration** | ⏳ | 未實作 (可擴展) |
+| **Function Execution** | ✅ | AccountAggregationFunction 伺服器端運算 |
+| **Security** | ✅ | GeodeSecurityConfig 認證授權 |
+| **Lucene Integration** | ✅ | LuceneSearchService 全文搜尋 |
+| **Cache Writer** | ✅ | CustomerCacheWriter (Write-through) |
+| **Cache Loader** | ✅ | CustomerCacheLoader (Read-through) |
+| **Cache Listener** | ✅ | CustomerCacheListener 事件監聽 |
+| **Async Event Queue** | ✅ | AccountAsyncEventListener |
+| **Delta Propagation** | ✅ | DeltaAccount 差量傳輸 |
+| **Expiration** | ✅ | TTL 和 Idle Timeout 配置 |
+| **Compression** | ✅ | Snappy 壓縮支援 |
 
 ---
 
@@ -471,6 +504,44 @@ docker network rm geode-network
 | POST | `/api/accounts/{id}/deposit` | 存款 |
 | POST | `/api/accounts/{id}/withdraw` | 提款 |
 | POST | `/api/accounts/transfer` | 帳戶間轉帳 |
+
+### Function Execution (伺服器運算)
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/functions/accounts/aggregate?operation=` | 執行聚合運算 |
+| GET | `/api/functions/accounts/total-balance` | 取得總餘額 |
+| GET | `/api/functions/accounts/count-by-type` | 依類型統計 |
+| GET | `/api/functions/accounts/average-balance` | 平均餘額 |
+| GET | `/api/functions/accounts/summary` | 完整摘要 |
+
+### 全文搜尋 (Lucene)
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/search/customers?q=` | 全欄位搜尋 |
+| GET | `/api/search/customers/name?q=` | 依名稱搜尋 |
+| GET | `/api/search/customers/email?q=` | 依 Email 搜尋 |
+| GET | `/api/search/indexes` | 查看索引資訊 |
+
+### 持續查詢 (CQ)
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/cq/queries` | 列出活躍的 CQ |
+| POST | `/api/cq/register` | 註冊預設 CQ |
+| DELETE | `/api/cq/queries/{name}` | 停止指定 CQ |
+| GET | `/api/cq/events` | 取得最近事件 |
+| GET | `/api/cq/alerts` | 取得警示事件 |
+
+### WAN 複製
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/wan/info` | WAN 配置資訊 |
+| GET | `/api/wan/pools` | 連線池資訊 |
+| GET | `/api/wan/status` | 完整狀態 |
+| POST | `/api/wan/test` | 測試 WAN 複製 |
 
 ---
 
@@ -1070,6 +1141,195 @@ docker exec geode-server-site-b gfsh \
 | `docker-compose-persistent.yaml` | 帶磁碟持久化的叢集 |
 | `docker-compose-full.yaml` | 完整堆疊 (Geode + App + Prometheus + Grafana) |
 | `docker-compose-wan.yaml` | WAN 複製雙叢集 |
+| `docker-compose-secure.yaml` | 啟用安全認證的叢集 |
+| `docker-compose-advanced.yaml` | 進階功能 (過期、非同步、壓縮) |
+
+---
+
+## 進階功能詳解
+
+### Function Execution (伺服器端運算)
+
+在資料所在的伺服器執行運算，減少網路傳輸。
+
+```mermaid
+graph LR
+    subgraph 傳統方式
+        C1[Client] -->|取回所有資料| S1[Server]
+        C1 -->|本地運算| C1
+    end
+
+    subgraph Function Execution
+        C2[Client] -->|發送函數| S2[Server]
+        S2 -->|伺服器運算| S2
+        S2 -->|回傳結果| C2
+    end
+
+    style S2 fill:#4CAF50
+```
+
+```bash
+# 取得帳戶總餘額
+curl http://localhost:8080/api/functions/accounts/total-balance
+
+# 依類型統計帳戶數
+curl http://localhost:8080/api/functions/accounts/count-by-type
+
+# 取得完整摘要
+curl http://localhost:8080/api/functions/accounts/summary
+```
+
+---
+
+### Security (安全認證)
+
+實作使用者認證與權限控制。
+
+| 使用者 | 密碼 | 權限 |
+|--------|------|------|
+| admin | admin123 | 完整存取 |
+| reader | reader123 | 唯讀 |
+| app | app123 | 讀寫資料 |
+| operator | operator123 | 叢集管理 |
+
+```bash
+# 啟動安全叢集
+docker-compose -f docker-compose-secure.yaml up -d
+
+# 使用認證連線
+gfsh -e "connect --locator=localhost[10334] --user=admin --password=admin123"
+```
+
+---
+
+### Lucene 全文搜尋
+
+支援客戶名稱和 Email 的模糊搜尋。
+
+```bash
+# 搜尋名稱包含 "John" 的客戶
+curl "http://localhost:8080/api/search/customers/name?q=John*"
+
+# 搜尋特定網域的 Email
+curl "http://localhost:8080/api/search/customers/email?q=*@example.com"
+
+# 全欄位搜尋
+curl "http://localhost:8080/api/search/customers?q=test"
+```
+
+---
+
+### Cache Writer/Loader (快取策略)
+
+```mermaid
+graph TB
+    subgraph Write-Through
+        W[寫入請求] --> CW[CacheWriter]
+        CW -->|1. 驗證| V{驗證}
+        V -->|通過| DB1[(外部資料庫)]
+        DB1 --> Cache1[Cache]
+    end
+
+    subgraph Read-Through
+        R[讀取請求] --> Cache2[Cache]
+        Cache2 -->|Miss| CL[CacheLoader]
+        CL --> DB2[(外部資料庫)]
+        DB2 --> Cache2
+    end
+```
+
+**CacheWriter**：寫入前執行，可用於驗證和同步到外部系統
+**CacheLoader**：讀取未命中時自動載入資料
+**CacheListener**：操作完成後觸發，用於日誌和通知
+
+---
+
+### Async Event Queue (非同步事件)
+
+```mermaid
+sequenceDiagram
+    participant App as 應用程式
+    participant Cache as Geode Cache
+    participant Queue as Async Queue
+    participant Listener as Event Listener
+    participant External as 外部系統
+
+    App->>Cache: put(key, value)
+    Cache-->>App: 立即回應
+    Cache->>Queue: 加入佇列
+    Queue->>Listener: 批次處理
+    Listener->>External: 非同步寫入
+```
+
+**特點**：
+- 不阻塞主要操作
+- 批次處理提高效率
+- 可配置持久化佇列
+
+---
+
+### Delta Propagation (差量傳輸)
+
+只傳送變更的欄位，大幅減少網路流量。
+
+```mermaid
+graph LR
+    subgraph 傳統方式
+        O1[完整物件 100KB] -->|網路| S1[Server]
+    end
+
+    subgraph Delta 傳輸
+        O2[只傳變更 1KB] -->|網路| S2[Server]
+    end
+
+    style O2 fill:#4CAF50
+```
+
+**適用場景**：
+- 大型物件的局部更新
+- WAN 複製優化
+- 高頻率更新的資料
+
+---
+
+### Expiration (過期策略)
+
+| 策略 | 說明 | 使用場景 |
+|------|------|----------|
+| **TTL** | 建立後固定時間過期 | Session、快取資料 |
+| **Idle Timeout** | 閒置一段時間後過期 | 使用者階段、暫存資料 |
+
+```bash
+# 建立 30 分鐘閒置過期的 Region
+gfsh> create region --name=Sessions --type=PARTITION \
+      --entry-idle-time-expiration=1800 \
+      --entry-idle-time-expiration-action=DESTROY
+
+# 建立 1 小時 TTL 的 Region
+gfsh> create region --name=Cache --type=PARTITION \
+      --entry-time-to-live-expiration=3600 \
+      --entry-time-to-live-expiration-action=INVALIDATE
+```
+
+---
+
+### Compression (壓縮)
+
+使用 Snappy 壓縮減少記憶體和儲存空間。
+
+| 資料類型 | 壓縮效果 | 建議 |
+|----------|----------|------|
+| JSON/XML | 高 (60-70%) | 推薦 |
+| 文字資料 | 高 | 推薦 |
+| 數值資料 | 中 (30-40%) | 可選 |
+| 已壓縮資料 | 無效果 | 不建議 |
+| 小物件 <1KB | 可能負面 | 不建議 |
+
+```bash
+# 建立壓縮的 Region
+gfsh> create region --name=CompressedData --type=PARTITION \
+      --compressor=org.apache.geode.compression.SnappyCompressor
+```
 
 ---
 

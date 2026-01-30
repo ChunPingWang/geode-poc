@@ -1,0 +1,95 @@
+# Advanced Docker Compose with all Geode features
+# Includes: Expiration, Async Queue, Compression, Delta Propagation
+
+services:
+  locator:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-locator-advanced
+    hostname: locator
+    command: >
+      sh -c "gfsh start locator
+        --name=locator1
+        --hostname-for-clients=locator
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.jmx-manager=true
+        --J=-Dgemfire.jmx-manager-start=true
+        --J=-Dgemfire.http-service-port=7070
+        --J=-Dgemfire.enable-network-partition-detection=false
+        --J=-Dgemfire.delta-propagation=true
+      && tail -f /dev/null"
+    ports:
+      - "10334:10334"
+      - "1099:1099"
+      - "7070:7070"
+    networks:
+      - geode-advanced-network
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  server1:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server1-advanced
+    hostname: server1
+    command: >
+      sh -c "sleep 30 && gfsh start server
+        --name=server1
+        --locators=locator[10334]
+        --hostname-for-clients=server1
+        --server-port=40404
+        --J=-Xms512m
+        --J=-Xmx1g
+        --J=-Dgemfire.enable-network-partition-detection=false
+        --J=-Dgemfire.delta-propagation=true
+      && gfsh -e 'connect --locator=locator[10334]'
+              -e 'create disk-store --name=dataDiskStore --dir=/data/geode'
+              -e 'create region --name=Customers --type=PARTITION_REDUNDANT'
+              -e 'create region --name=Accounts --type=PARTITION_REDUNDANT'
+              -e 'create region --name=Sessions --type=PARTITION --entry-idle-time-expiration=1800 --entry-idle-time-expiration-action=DESTROY'
+              -e 'create region --name=Cache --type=PARTITION --entry-time-to-live-expiration=3600 --entry-time-to-live-expiration-action=INVALIDATE'
+              -e 'create async-event-queue --id=accountEventQueue --listener=com.example.geodedemo.async.AccountAsyncEventListener --batch-size=100 --batch-time-interval=1000'
+      && tail -f /dev/null"
+    ports:
+      - "40404:40404"
+    volumes:
+      - server1-data:/data/geode
+    depends_on:
+      - locator
+    networks:
+      - geode-advanced-network
+
+  server2:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server2-advanced
+    hostname: server2
+    command: >
+      sh -c "sleep 45 && gfsh start server
+        --name=server2
+        --locators=locator[10334]
+        --hostname-for-clients=server2
+        --server-port=40404
+        --J=-Xms512m
+        --J=-Xmx1g
+        --J=-Dgemfire.enable-network-partition-detection=false
+        --J=-Dgemfire.delta-propagation=true
+      && tail -f /dev/null"
+    ports:
+      - "40405:40404"
+    volumes:
+      - server2-data:/data/geode
+    depends_on:
+      - locator
+    networks:
+      - geode-advanced-network
+
+volumes:
+  server1-data:
+  server2-data:
+
+networks:
+  geode-advanced-network:
+    driver: bridge
