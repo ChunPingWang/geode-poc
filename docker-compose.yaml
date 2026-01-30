@@ -3,32 +3,70 @@ services:
     image: apachegeode/geode:1.15.1
     container_name: geode-locator
     hostname: locator
-    command:
-      - sh
-      - -c
-      - |
-        gfsh -e "start locator --name=locator1 --bind-address=0.0.0.0 --hostname-for-clients=locator --J=-Xms256m --J=-Xmx512m --J=-Dgemfire.jmx-manager=true --J=-Dgemfire.jmx-manager-start=true --J=-Dgemfire.http-service-port=7070"
-        tail -f /dev/null
+    command: >
+      sh -c "gfsh start locator
+        --name=locator1
+        --hostname-for-clients=locator
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.jmx-manager=true
+        --J=-Dgemfire.jmx-manager-start=true
+        --J=-Dgemfire.http-service-port=7070
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && tail -f /dev/null"
     ports:
       - "10334:10334"
       - "1099:1099"
       - "7070:7070"
     networks:
       - geode-network
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   server1:
     image: apachegeode/geode:1.15.1
     container_name: geode-server1
     hostname: server1
-    command:
-      - sh
-      - -c
-      - |
-        sleep 60
-        gfsh -e "start server --name=server1 --locators=locator[10334] --bind-address=0.0.0.0 --hostname-for-clients=server1 --server-port=40404 --J=-Xms256m --J=-Xmx512m"
-        tail -f /dev/null
+    command: >
+      sh -c "sleep 30 && gfsh start server
+        --name=server1
+        --locators=locator[10334]
+        --hostname-for-clients=server1
+        --server-port=40404
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && gfsh -e 'connect --locator=locator[10334]'
+              -e 'create region --name=Customers --type=PARTITION_REDUNDANT'
+              -e 'create region --name=Accounts --type=PARTITION_REDUNDANT'
+      && tail -f /dev/null"
     ports:
       - "40404:40404"
+    depends_on:
+      - locator
+    networks:
+      - geode-network
+
+  server2:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server2
+    hostname: server2
+    command: >
+      sh -c "sleep 45 && gfsh start server
+        --name=server2
+        --locators=locator[10334]
+        --hostname-for-clients=server2
+        --server-port=40404
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && tail -f /dev/null"
+    ports:
+      - "40405:40404"
     depends_on:
       - locator
     networks:

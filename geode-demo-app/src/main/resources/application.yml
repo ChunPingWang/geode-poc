@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: geode-demo-app
+  data:
+    gemfire:
+      pool:
+        locators: ${GEODE_LOCATOR:localhost}[10334]
+      cache:
+        client:
+          durable-client-id: geode-demo-app
+          durable-client-timeout: 300
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.example.geodedemo: DEBUG
+    org.apache.geode: INFO
+    org.springframework.data.gemfire: INFO
