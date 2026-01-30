@@ -1,0 +1,28 @@
+---
+# Test client pod for verifying Geode cluster
+apiVersion: v1
+kind: Pod
+metadata:
+  name: geode-test-client
+  namespace: geode
+  labels:
+    app: geode-test-client
+spec:
+  restartPolicy: Never
+  containers:
+    - name: gfsh-client
+      image: apachegeode/geode:1.15.1
+      command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Geode Test Client Ready"
+          echo "Use: kubectl exec -it geode-test-client -n geode -- gfsh"
+          sleep infinity
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "200m"

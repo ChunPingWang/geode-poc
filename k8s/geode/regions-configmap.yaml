@@ -1,0 +1,57 @@
+---
+# ConfigMap for Region creation scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: geode-region-scripts
+  namespace: geode
+data:
+  create-regions.gfsh: |
+    connect --locator=geode-locator-0.geode-locator-headless.geode.svc.cluster.local[10334]
+
+    # PoC Scenario 1: High-speed cache - Customers Region
+    create region --name=Customers --type=PARTITION_REDUNDANT \
+      --redundant-copies=1 \
+      --total-num-buckets=113 \
+      --entry-time-to-live-expiration=3600 \
+      --entry-time-to-live-expiration-action=INVALIDATE \
+      --enable-statistics=true
+
+    # PoC Scenario 1: Accounts Region
+    create region --name=Accounts --type=PARTITION_REDUNDANT \
+      --redundant-copies=1 \
+      --total-num-buckets=113 \
+      --enable-statistics=true
+
+    # PoC Scenario 1: Products Region
+    create region --name=Products --type=PARTITION_REDUNDANT \
+      --redundant-copies=1 \
+      --total-num-buckets=53 \
+      --entry-time-to-live-expiration=1800 \
+      --entry-time-to-live-expiration-action=INVALIDATE \
+      --enable-statistics=true
+
+    # PoC Scenario 2: Transaction processing - Transactions Region
+    create region --name=Transactions --type=PARTITION_REDUNDANT \
+      --redundant-copies=1 \
+      --total-num-buckets=113 \
+      --enable-statistics=true
+
+    # PoC Scenario 3: Session management - Sessions Region (REPLICATE for full copies)
+    create region --name=Sessions --type=REPLICATE \
+      --entry-idle-time-expiration=1800 \
+      --entry-idle-time-expiration-action=DESTROY \
+      --enable-statistics=true
+
+    # PoC Scenario 4: Event-driven - CreditLimits Region
+    create region --name=CreditLimits --type=PARTITION_REDUNDANT \
+      --redundant-copies=1 \
+      --total-num-buckets=53 \
+      --enable-statistics=true
+
+    list regions
+    list members
+
+    describe region --name=Customers
+    describe region --name=Accounts
+    describe region --name=Sessions

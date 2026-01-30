@@ -1,0 +1,54 @@
+---
+# Job to initialize Geode regions after cluster is ready
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: geode-region-init
+  namespace: geode
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: gfsh
+          image: apachegeode/geode:1.15.1
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              echo "Waiting for locators and servers to be ready..."
+              sleep 30
+
+              # Check locator connectivity
+              until nc -z geode-locator-0.geode-locator-headless.geode.svc.cluster.local 10334; do
+                echo "Waiting for locator-0..."
+                sleep 5
+              done
+
+              # Check all servers are connected
+              for i in 0 1; do
+                until nc -z geode-server-${i}.geode-server-headless.geode.svc.cluster.local 40404; do
+                  echo "Waiting for server-${i}..."
+                  sleep 5
+                done
+              done
+
+              echo "All members ready, creating regions..."
+
+              gfsh -e "connect --locator=geode-locator-0.geode-locator-headless.geode.svc.cluster.local[10334]" \
+                   -e "list members" \
+                   -e "create region --name=Customers --type=PARTITION_REDUNDANT --redundant-copies=1 --total-num-buckets=113 --entry-time-to-live-expiration=3600 --entry-time-to-live-expiration-action=INVALIDATE --enable-statistics=true" \
+                   -e "create region --name=Accounts --type=PARTITION_REDUNDANT --redundant-copies=1 --total-num-buckets=113 --enable-statistics=true" \
+                   -e "create region --name=Products --type=PARTITION_REDUNDANT --redundant-copies=1 --total-num-buckets=53 --entry-time-to-live-expiration=1800 --entry-time-to-live-expiration-action=INVALIDATE --enable-statistics=true" \
+                   -e "create region --name=Transactions --type=PARTITION_REDUNDANT --redundant-copies=1 --total-num-buckets=113 --enable-statistics=true" \
+                   -e "create region --name=Sessions --type=REPLICATE --entry-idle-time-expiration=1800 --entry-idle-time-expiration-action=DESTROY --enable-statistics=true" \
+                   -e "create region --name=CreditLimits --type=PARTITION_REDUNDANT --redundant-copies=1 --total-num-buckets=53 --enable-statistics=true" \
+                   -e "list regions" \
+                   -e "describe region --name=Customers" \
+                   -e "describe region --name=Accounts"
+
+              echo "Region initialization completed!"

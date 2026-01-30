@@ -1,0 +1,22 @@
+# Kind cluster configuration for Apache Geode PoC
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: geode-poc
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 9080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 9443
+        protocol: TCP
+      - containerPort: 31070
+        hostPort: 31070
+        protocol: TCP

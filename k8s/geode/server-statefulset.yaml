@@ -1,0 +1,103 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: geode-server
+  namespace: geode
+  labels:
+    app: geode-server
+spec:
+  serviceName: geode-server-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: geode-server
+  template:
+    metadata:
+      labels:
+        app: geode-server
+    spec:
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: wait-for-locator
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for locator to be ready..."
+              until nc -z geode-locator-0.geode-locator-headless.geode.svc.cluster.local 10334; do
+                echo "Locator not ready, waiting..."
+                sleep 10
+              done
+              echo "Locator is ready!"
+      containers:
+        - name: server
+          image: apachegeode/geode:1.15.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              POD_IP=$(hostname -i)
+              HOSTNAME_FQDN="${HOSTNAME}.geode-server-headless.geode.svc.cluster.local"
+              LOCATORS="geode-locator-0.geode-locator-headless.geode.svc.cluster.local[10334]"
+
+              echo "Starting server ${HOSTNAME} on IP ${POD_IP}"
+              echo "Connecting to locators: ${LOCATORS}"
+
+              gfsh start server \
+                --name=${HOSTNAME} \
+                --locators=${LOCATORS} \
+                --hostname-for-clients=${HOSTNAME_FQDN} \
+                --bind-address=${POD_IP} \
+                --server-port=40404 \
+                --J=-Xms256m \
+                --J=-Xmx768m \
+                --J=-Dgemfire.statistic-sampling-enabled=true
+
+              echo "Server started successfully on ${POD_IP}"
+
+              # Keep container running
+              tail -f /dev/null
+          ports:
+            - containerPort: 40404
+              name: server
+              protocol: TCP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 40404
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            tcpSocket:
+              port: 40404
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5

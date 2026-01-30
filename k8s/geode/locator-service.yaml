@@ -1,0 +1,60 @@
+---
+# Headless service for Locator peer discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-locator-headless
+  namespace: geode
+  labels:
+    app: geode-locator
+spec:
+  clusterIP: None
+  selector:
+    app: geode-locator
+  ports:
+    - name: locator
+      port: 10334
+      targetPort: 10334
+    - name: jmx
+      port: 1099
+      targetPort: 1099
+    - name: pulse
+      port: 7070
+      targetPort: 7070
+---
+# ClusterIP service for client connections
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-locator
+  namespace: geode
+  labels:
+    app: geode-locator
+spec:
+  type: ClusterIP
+  selector:
+    app: geode-locator
+  ports:
+    - name: locator
+      port: 10334
+      targetPort: 10334
+    - name: jmx
+      port: 1099
+      targetPort: 1099
+---
+# NodePort service for Pulse Web UI
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-pulse
+  namespace: geode
+  labels:
+    app: geode-locator
+spec:
+  type: ClusterIP
+  selector:
+    app: geode-locator
+  ports:
+    - name: pulse
+      port: 7070
+      targetPort: 7070

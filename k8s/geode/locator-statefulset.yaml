@@ -1,0 +1,101 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: geode-locator
+  namespace: geode
+  labels:
+    app: geode-locator
+spec:
+  serviceName: geode-locator-headless
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: geode-locator
+  template:
+    metadata:
+      labels:
+        app: geode-locator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: locator
+          image: apachegeode/geode:1.15.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              # Wait for DNS resolution
+              sleep 10
+
+              # Get the pod IP for binding
+              POD_IP=$(hostname -i)
+              HOSTNAME_FQDN="${HOSTNAME}.geode-locator-headless.geode.svc.cluster.local"
+
+              echo "Starting locator ${HOSTNAME} on IP ${POD_IP}..."
+
+              gfsh start locator \
+                --name=${HOSTNAME} \
+                --hostname-for-clients=${HOSTNAME_FQDN} \
+                --bind-address=${POD_IP} \
+                --port=10334 \
+                --J=-Dgemfire.jmx-manager=true \
+                --J=-Dgemfire.jmx-manager-start=true \
+                --J=-Dgemfire.jmx-manager-port=1099 \
+                --J=-Dgemfire.http-service-port=7070 \
+                --J=-Dgemfire.http-service-bind-address=${POD_IP} \
+                --J=-Xms256m \
+                --J=-Xmx512m
+
+              echo "Locator started successfully on ${POD_IP}"
+
+              # Keep container running
+              tail -f /dev/null
+          ports:
+            - containerPort: 10334
+              name: locator
+              protocol: TCP
+            - containerPort: 1099
+              name: jmx
+              protocol: TCP
+            - containerPort: 7070
+              name: pulse
+              protocol: TCP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "768Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 10334
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            tcpSocket:
+              port: 10334
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5

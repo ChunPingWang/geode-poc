@@ -1,0 +1,34 @@
+---
+# Headless service for Server peer communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-server-headless
+  namespace: geode
+  labels:
+    app: geode-server
+spec:
+  clusterIP: None
+  selector:
+    app: geode-server
+  ports:
+    - name: server
+      port: 40404
+      targetPort: 40404
+---
+# ClusterIP service for client connections to servers
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-server
+  namespace: geode
+  labels:
+    app: geode-server
+spec:
+  type: ClusterIP
+  selector:
+    app: geode-server
+  ports:
+    - name: server
+      port: 40404
+      targetPort: 40404
