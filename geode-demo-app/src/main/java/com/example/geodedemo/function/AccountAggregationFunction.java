@@ -84,7 +84,7 @@ public class AccountAggregationFunction implements Function<String> {
         Map<String, Long> counts = new HashMap<>();
         for (Account account : region.values()) {
             if (account != null && account.getAccountType() != null) {
-                String type = account.getAccountType();
+                String type = account.getAccountType().name();
                 counts.merge(type, 1L, Long::sum);
             }
         }

@@ -33,7 +33,7 @@ public class CustomerCacheLoader implements CacheLoader<String, Customer> {
         sample1.setCustomerId("EXT-001");
         sample1.setName("External User 1");
         sample1.setEmail("external1@example.com");
-        sample1.setStatus("ACTIVE");
+        sample1.setStatus(Customer.CustomerStatus.ACTIVE);
         sample1.setCreatedAt(LocalDateTime.now());
         sample1.setUpdatedAt(LocalDateTime.now());
         EXTERNAL_DATABASE.put("EXT-001", sample1);
@@ -42,7 +42,7 @@ public class CustomerCacheLoader implements CacheLoader<String, Customer> {
         sample2.setCustomerId("EXT-002");
         sample2.setName("External User 2");
         sample2.setEmail("external2@example.com");
-        sample2.setStatus("ACTIVE");
+        sample2.setStatus(Customer.CustomerStatus.ACTIVE);
         sample2.setCreatedAt(LocalDateTime.now());
         sample2.setUpdatedAt(LocalDateTime.now());
         EXTERNAL_DATABASE.put("EXT-002", sample2);

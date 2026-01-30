@@ -2,6 +2,7 @@ package com.example.geodedemo.async;
 
 import com.example.geodedemo.entity.Account;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.geode.cache.Operation;
 import org.apache.geode.cache.asyncqueue.AsyncEvent;
 import org.apache.geode.cache.asyncqueue.AsyncEventListener;
 
@@ -53,24 +54,20 @@ public class AccountAsyncEventListener implements AsyncEventListener {
     private void processEvent(AsyncEvent event) {
         String key = (String) event.getKey();
         Account account = (Account) event.getDeserializedValue();
-        String operation = event.getOperation().name();
+        Operation operation = event.getOperation();
 
         log.debug("[AsyncEventListener] Event - Op: {}, Key: {}, Account: {}",
             operation, key, account != null ? account.getAccountId() : "null");
 
         // Process based on operation type
-        switch (event.getOperation()) {
-            case CREATE:
-                handleCreate(key, account);
-                break;
-            case UPDATE:
-                handleUpdate(key, account);
-                break;
-            case DESTROY:
-                handleDestroy(key);
-                break;
-            default:
-                log.debug("[AsyncEventListener] Unhandled operation: {}", operation);
+        if (operation.isCreate()) {
+            handleCreate(key, account);
+        } else if (operation.isUpdate()) {
+            handleUpdate(key, account);
+        } else if (operation.isDestroy()) {
+            handleDestroy(key);
+        } else {
+            log.debug("[AsyncEventListener] Unhandled operation: {}", operation);
         }
     }
 
