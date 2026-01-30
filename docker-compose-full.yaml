@@ -1,0 +1,135 @@
+# Full Docker Compose with Geode Cluster, App, and Monitoring Stack
+
+services:
+  # ============ Geode Cluster ============
+  locator:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-locator
+    hostname: locator
+    command: >
+      sh -c "gfsh start locator
+        --name=locator1
+        --hostname-for-clients=locator
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.jmx-manager=true
+        --J=-Dgemfire.jmx-manager-start=true
+        --J=-Dgemfire.http-service-port=7070
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && tail -f /dev/null"
+    ports:
+      - "10334:10334"
+      - "1099:1099"
+      - "7070:7070"
+    networks:
+      - geode-network
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  server1:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server1
+    hostname: server1
+    command: >
+      sh -c "sleep 30 && gfsh start server
+        --name=server1
+        --locators=locator[10334]
+        --hostname-for-clients=server1
+        --server-port=40404
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && gfsh -e 'connect --locator=locator[10334]'
+              -e 'create region --name=Customers --type=PARTITION_REDUNDANT'
+              -e 'create region --name=Accounts --type=PARTITION_REDUNDANT'
+      && tail -f /dev/null"
+    ports:
+      - "40404:40404"
+    depends_on:
+      - locator
+    networks:
+      - geode-network
+
+  server2:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server2
+    hostname: server2
+    command: >
+      sh -c "sleep 45 && gfsh start server
+        --name=server2
+        --locators=locator[10334]
+        --hostname-for-clients=server2
+        --server-port=40404
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && tail -f /dev/null"
+    ports:
+      - "40405:40404"
+    depends_on:
+      - locator
+    networks:
+      - geode-network
+
+  # ============ Application ============
+  app:
+    image: geode-demo-app:latest
+    container_name: geode-demo-app
+    hostname: app
+    environment:
+      - GEODE_LOCATOR=locator
+    ports:
+      - "8080:8080"
+    depends_on:
+      - server1
+      - server2
+    networks:
+      - geode-network
+    restart: on-failure
+
+  # ============ Monitoring Stack ============
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    hostname: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - geode-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/geode-dashboard.json:ro
+    depends_on:
+      - prometheus
+    networks:
+      - geode-network
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  geode-network:
+    driver: bridge

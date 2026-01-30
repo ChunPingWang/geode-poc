@@ -1,0 +1,128 @@
+# WAN Replication Docker Compose - Two Geode Clusters with Gateway Senders/Receivers
+# Cluster 1 (Site A - Taiwan) and Cluster 2 (Site B - Japan)
+
+services:
+  # ============ Cluster 1 (Site A - Taiwan) ============
+  locator-site-a:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-locator-site-a
+    hostname: locator-site-a
+    command: >
+      sh -c "gfsh start locator
+        --name=locator-site-a
+        --hostname-for-clients=locator-site-a
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.distributed-system-id=1
+        --J=-Dgemfire.remote-locators=locator-site-b[10334]
+        --J=-Dgemfire.jmx-manager=true
+        --J=-Dgemfire.jmx-manager-start=true
+        --J=-Dgemfire.http-service-port=7070
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && tail -f /dev/null"
+    ports:
+      - "10334:10334"
+      - "1099:1099"
+      - "7070:7070"
+    networks:
+      - geode-wan-network
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  server-site-a:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server-site-a
+    hostname: server-site-a
+    command: >
+      sh -c "sleep 30 && gfsh start server
+        --name=server-site-a
+        --locators=locator-site-a[10334]
+        --hostname-for-clients=server-site-a
+        --server-port=40404
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.distributed-system-id=1
+        --J=-Dgemfire.remote-locators=locator-site-b[10334]
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && sleep 10
+      && gfsh -e 'connect --locator=locator-site-a[10334]'
+              -e 'create gateway-receiver'
+              -e 'create gateway-sender --id=sender-to-site-b --remote-distributed-system-id=2 --parallel=true'
+              -e 'create region --name=Customers --type=PARTITION_REDUNDANT --gateway-sender-id=sender-to-site-b'
+              -e 'create region --name=Accounts --type=PARTITION_REDUNDANT --gateway-sender-id=sender-to-site-b'
+      && tail -f /dev/null"
+    ports:
+      - "40404:40404"
+    depends_on:
+      - locator-site-a
+    networks:
+      - geode-wan-network
+
+  # ============ Cluster 2 (Site B - Japan) ============
+  locator-site-b:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-locator-site-b
+    hostname: locator-site-b
+    command: >
+      sh -c "gfsh start locator
+        --name=locator-site-b
+        --hostname-for-clients=locator-site-b
+        --port=10334
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.distributed-system-id=2
+        --J=-Dgemfire.remote-locators=locator-site-a[10334]
+        --J=-Dgemfire.jmx-manager=true
+        --J=-Dgemfire.jmx-manager-start=true
+        --J=-Dgemfire.http-service-port=7071
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && tail -f /dev/null"
+    ports:
+      - "10335:10334"
+      - "1100:1099"
+      - "7071:7071"
+    networks:
+      - geode-wan-network
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  server-site-b:
+    image: apachegeode/geode:1.15.1
+    container_name: geode-server-site-b
+    hostname: server-site-b
+    command: >
+      sh -c "sleep 45 && gfsh start server
+        --name=server-site-b
+        --locators=locator-site-b[10334]
+        --hostname-for-clients=server-site-b
+        --server-port=40404
+        --J=-Xms256m
+        --J=-Xmx512m
+        --J=-Dgemfire.distributed-system-id=2
+        --J=-Dgemfire.remote-locators=locator-site-a[10334]
+        --J=-Dgemfire.enable-network-partition-detection=false
+      && sleep 10
+      && gfsh -e 'connect --locator=locator-site-b[10334]'
+              -e 'create gateway-receiver'
+              -e 'create gateway-sender --id=sender-to-site-a --remote-distributed-system-id=1 --parallel=true'
+              -e 'create region --name=Customers --type=PARTITION_REDUNDANT --gateway-sender-id=sender-to-site-a'
+              -e 'create region --name=Accounts --type=PARTITION_REDUNDANT --gateway-sender-id=sender-to-site-a'
+      && tail -f /dev/null"
+    ports:
+      - "40405:40404"
+    depends_on:
+      - locator-site-b
+    networks:
+      - geode-wan-network
+
+networks:
+  geode-wan-network:
+    driver: bridge

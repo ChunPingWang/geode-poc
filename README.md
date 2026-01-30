@@ -624,11 +624,251 @@ graph LR
 
 ---
 
+## 進階功能
+
+### ACID 交易
+
+支援跨 Region 的分散式 ACID 交易。
+
+```mermaid
+sequenceDiagram
+    participant C as 客戶端
+    participant TM as TransactionManager
+    participant A as 帳戶 A
+    participant B as 帳戶 B
+
+    C->>TM: 開始交易
+    TM->>A: 扣款 $500
+    TM->>B: 存款 $500
+
+    alt 成功
+        TM->>TM: commit()
+        TM-->>C: 交易成功
+    else 失敗
+        TM->>TM: rollback()
+        Note over A,B: 兩者皆還原
+        TM-->>C: 交易回滾
+    end
+```
+
+```bash
+# 使用交易進行轉帳
+curl -X POST http://localhost:8080/api/transactions/transfer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fromAccountId": "ACC-001",
+    "toAccountId": "ACC-002",
+    "amount": 500
+  }'
+
+# 查詢交易歷史
+curl http://localhost:8080/api/transactions/history?limit=10
+```
+
+---
+
+### 持續查詢 (Continuous Query)
+
+即時監控資料變更，當帳戶餘額發生變化時自動觸發事件。
+
+```mermaid
+graph TB
+    subgraph Geode叢集
+        R[Accounts Region]
+        CQ[CQ 監聽器<br/>SELECT * FROM /Accounts]
+    end
+
+    subgraph 事件處理
+        E1[餘額低於閾值 → 警示]
+        E2[大額交易 → 通知]
+        E3[帳戶變更 → 記錄]
+    end
+
+    R -->|資料變更| CQ
+    CQ --> E1
+    CQ --> E2
+    CQ --> E3
+```
+
+```bash
+# 啟動 CQ 監控
+curl -X POST http://localhost:8080/api/cq/start
+
+# 查看 CQ 事件
+curl http://localhost:8080/api/cq/events
+
+# 查看警示
+curl http://localhost:8080/api/cq/events/alerts
+
+# 停止 CQ 監控
+curl -X POST http://localhost:8080/api/cq/stop
+```
+
+---
+
+### 磁碟持久化
+
+資料持久化到磁碟，確保重啟後資料不遺失。
+
+```bash
+# 啟動帶持久化的叢集
+docker-compose -f docker-compose-persistent.yaml up -d
+
+# Region 類型: PARTITION_REDUNDANT_PERSISTENT
+# 資料會同步寫入 disk-store
+```
+
+---
+
+### Prometheus 監控
+
+整合 Prometheus + Grafana 監控堆疊。
+
+```mermaid
+graph LR
+    subgraph 應用程式
+        APP[Spring Boot App<br/>:8080/actuator/prometheus]
+    end
+
+    subgraph 監控堆疊
+        P[Prometheus<br/>:9090]
+        G[Grafana<br/>:3000]
+    end
+
+    APP -->|抓取指標| P
+    P -->|資料來源| G
+```
+
+**可用指標：**
+
+| 指標 | 說明 |
+|------|------|
+| `geode_region_size` | Region 中的項目數量 |
+| `geode_transactions_total` | 交易總數 |
+| `geode_transactions_failed` | 失敗交易數 |
+| `geode_operation_duration_seconds` | 讀寫操作延遲 |
+| `geode_cq_events_total` | CQ 事件總數 |
+
+```bash
+# 啟動完整監控堆疊
+docker-compose -f docker-compose-full.yaml up -d
+
+# Prometheus: http://localhost:9090
+# Grafana: http://localhost:3000 (admin/admin)
+```
+
+---
+
+### WAN 複製
+
+跨資料中心的雙向資料複製，用於災難復原。
+
+```mermaid
+graph TB
+    subgraph Site_A[站點 A - 台灣]
+        LA[Locator A<br/>DS-ID: 1]
+        SA[Server A]
+        GS_A[Gateway Sender<br/>→ Site B]
+        GR_A[Gateway Receiver]
+
+        LA --> SA
+        SA --> GS_A
+        SA --> GR_A
+    end
+
+    subgraph Site_B[站點 B - 日本]
+        LB[Locator B<br/>DS-ID: 2]
+        SB[Server B]
+        GS_B[Gateway Sender<br/>→ Site A]
+        GR_B[Gateway Receiver]
+
+        LB --> SB
+        SB --> GS_B
+        SB --> GR_B
+    end
+
+    GS_A -.->|WAN 複製| GR_B
+    GS_B -.->|WAN 複製| GR_A
+
+    style Site_A fill:#e3f2fd
+    style Site_B fill:#fff3e0
+```
+
+**WAN 配置參數：**
+
+| 參數 | Site A | Site B |
+|------|--------|--------|
+| distributed-system-id | 1 | 2 |
+| remote-locators | locator-site-b[10334] | locator-site-a[10334] |
+| Gateway Sender ID | sender-to-site-b | sender-to-site-a |
+
+```bash
+# 啟動 WAN 複製叢集
+docker-compose -f docker-compose-wan.yaml up -d
+
+# 測試 WAN 複製
+./scripts/test-wan-replication.sh
+
+# API 查詢 WAN 狀態
+curl http://localhost:8080/api/wan/status
+curl http://localhost:8080/api/wan/pools
+```
+
+---
+
+### 測試案例 7：WAN 複製測試
+
+**目標**：驗證跨站點資料複製
+
+```mermaid
+sequenceDiagram
+    participant A as 站點 A (台灣)
+    participant B as 站點 B (日本)
+
+    A->>A: 寫入客戶 WAN-001
+    A->>B: Gateway Sender 複製
+    B->>B: 驗證 WAN-001 存在 ✅
+
+    B->>B: 寫入客戶 WAN-002
+    B->>A: Gateway Sender 複製
+    A->>A: 驗證 WAN-002 存在 ✅
+```
+
+```bash
+# 在 Site A 寫入資料
+docker exec geode-server-site-a gfsh \
+  -e "connect --locator=locator-site-a[10334]" \
+  -e "put --region=/Customers --key=WAN-001 --value='Taiwan Customer'"
+
+# 在 Site B 驗證複製
+docker exec geode-server-site-b gfsh \
+  -e "connect --locator=locator-site-b[10334]" \
+  -e "get --region=/Customers --key=WAN-001"
+
+# 預期：資料已複製到 Site B
+```
+
+**結果**：✅ 通過 - 雙向複製正常運作
+
+---
+
+## Docker Compose 檔案
+
+| 檔案 | 說明 |
+|------|------|
+| `docker-compose.yaml` | 基本 Geode 叢集 |
+| `docker-compose-persistent.yaml` | 帶磁碟持久化的叢集 |
+| `docker-compose-full.yaml` | 完整堆疊 (Geode + App + Prometheus + Grafana) |
+| `docker-compose-wan.yaml` | WAN 複製雙叢集 |
+
+---
+
 ## 參考資源
 
 - [Apache Geode 官方文件](https://geode.apache.org/docs/)
 - [Spring Data Geode](https://spring.io/projects/spring-data-geode)
 - [Geode GitHub 儲存庫](https://github.com/apache/geode)
+- [Geode WAN 複製指南](https://geode.apache.org/docs/guide/115/topologies_and_comm/multi_site_configuration/chapter_overview.html)
 
 ---
 

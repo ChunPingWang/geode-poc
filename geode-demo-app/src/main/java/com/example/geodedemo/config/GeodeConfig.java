@@ -1,7 +1,10 @@
 package com.example.geodedemo.config;
 
+import com.example.geodedemo.entity.Account;
 import org.apache.geode.cache.GemFireCache;
+import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientRegionShortcut;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.gemfire.config.annotation.ClientCacheApplication;
 import org.springframework.data.gemfire.config.annotation.EnableCachingDefinedRegions;
@@ -13,6 +16,8 @@ import org.springframework.data.gemfire.config.annotation.EnableLogging;
 @EnableCachingDefinedRegions(clientRegionShortcut = ClientRegionShortcut.PROXY)
 public class GeodeConfig {
 
-    // Additional Geode configuration can be added here
-    // For example, custom region configurations, PDX serializers, etc.
+    @Bean
+    public Region<String, Account> accountRegion(GemFireCache cache) {
+        return cache.getRegion("Accounts");
+    }
 }
