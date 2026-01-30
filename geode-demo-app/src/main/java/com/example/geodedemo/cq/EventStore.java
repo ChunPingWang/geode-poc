@@ -3,8 +3,11 @@ package com.example.geodedemo.cq;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
@@ -16,6 +19,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 public class EventStore {
 
     private final ConcurrentLinkedDeque<BalanceChangeEvent> events = new ConcurrentLinkedDeque<>();
+    private final Map<String, BigDecimal> lastKnownBalances = new ConcurrentHashMap<>();
     private static final int MAX_EVENTS = 1000;
 
     public void addEvent(BalanceChangeEvent event) {
@@ -54,9 +58,18 @@ public class EventStore {
 
     public void clear() {
         events.clear();
+        lastKnownBalances.clear();
     }
 
     public int size() {
         return events.size();
+    }
+
+    public BigDecimal getLastKnownBalance(String accountId) {
+        return lastKnownBalances.get(accountId);
+    }
+
+    public void updateLastKnownBalance(String accountId, BigDecimal balance) {
+        lastKnownBalances.put(accountId, balance);
     }
 }

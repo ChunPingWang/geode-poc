@@ -50,7 +50,7 @@ public class ContinuousQueryService {
     /**
      * Register CQ to monitor all account balance changes.
      */
-    public void registerAccountBalanceCq() throws CqException {
+    public void registerAccountBalanceCq() throws CqException, CqExistsException, RegionNotFoundException {
         String queryName = "AccountBalanceMonitor";
 
         if (activeQueries.containsKey(queryName)) {
@@ -80,7 +80,7 @@ public class ContinuousQueryService {
     /**
      * Register a custom CQ with specific criteria.
      */
-    public void registerCustomCq(String name, String oqlQuery) throws CqException {
+    public void registerCustomCq(String name, String oqlQuery) throws CqException, CqExistsException, RegionNotFoundException {
         if (activeQueries.containsKey(name)) {
             throw new IllegalStateException("CQ with name '" + name + "' already exists");
         }

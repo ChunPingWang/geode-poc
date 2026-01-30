@@ -24,7 +24,11 @@ import java.util.UUID;
 public class TransactionService {
 
     private final GemFireCache cache;
-    private final Region<String, Account> accountRegion;
+
+    @SuppressWarnings("unchecked")
+    private Region<String, Account> getAccountRegion() {
+        return cache.getRegion("Accounts");
+    }
 
     /**
      * Transfer funds between accounts with ACID guarantees.
@@ -42,8 +46,8 @@ public class TransactionService {
             txManager.begin();
 
             // Get accounts within transaction
-            Account fromAccount = accountRegion.get(fromAccountId);
-            Account toAccount = accountRegion.get(toAccountId);
+            Account fromAccount = getAccountRegion().get(fromAccountId);
+            Account toAccount = getAccountRegion().get(toAccountId);
 
             if (fromAccount == null) {
                 txManager.rollback();
@@ -74,8 +78,8 @@ public class TransactionService {
             toAccount.setUpdatedAt(LocalDateTime.now());
 
             // Update both accounts
-            accountRegion.put(fromAccountId, fromAccount);
-            accountRegion.put(toAccountId, toAccount);
+            getAccountRegion().put(fromAccountId, fromAccount);
+            getAccountRegion().put(toAccountId, toAccount);
 
             // Commit transaction
             txManager.commit();
@@ -127,7 +131,7 @@ public class TransactionService {
                 String accountId = entry.getKey();
                 BigDecimal adjustment = entry.getValue();
 
-                Account account = accountRegion.get(accountId);
+                Account account = getAccountRegion().get(accountId);
                 if (account == null) {
                     txManager.rollback();
                     throw new ResourceNotFoundException("Account", accountId);
@@ -143,7 +147,7 @@ public class TransactionService {
 
                 account.setBalance(newBalance);
                 account.setUpdatedAt(LocalDateTime.now());
-                accountRegion.put(accountId, account);
+                getAccountRegion().put(accountId, account);
             }
 
             txManager.commit();

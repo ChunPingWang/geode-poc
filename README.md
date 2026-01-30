@@ -722,7 +722,7 @@ docker-compose -f docker-compose-persistent.yaml up -d
 
 ### Prometheus 監控
 
-整合 Prometheus + Grafana 監控堆疊。
+整合 Prometheus + Grafana 監控堆疊，提供完整的可觀測性解決方案。
 
 ```mermaid
 graph LR
@@ -739,22 +739,107 @@ graph LR
     P -->|資料來源| G
 ```
 
-**可用指標：**
+#### 監控存取資訊
+
+| 服務 | URL | 帳號/密碼 | 說明 |
+|------|-----|-----------|------|
+| **Prometheus** | http://localhost:9090 | - | 指標查詢與警示 |
+| **Grafana** | http://localhost:3000 | admin / admin | 視覺化儀表板 |
+| **Geode Pulse** | http://localhost:7070/pulse | admin / admin | Geode 原生監控 |
+| **應用程式指標** | http://localhost:8080/actuator/prometheus | - | 原始指標端點 |
+
+#### Prometheus 使用說明
+
+Prometheus 提供強大的 PromQL 查詢語言，可即時查詢 Geode 指標：
+
+```promql
+# 查看 Region 大小
+geode_region_size
+
+# 查看讀取延遲 (過去 5 分鐘平均)
+rate(geode_operation_duration_seconds_sum{operation="read"}[5m])
+  / rate(geode_operation_duration_seconds_count{operation="read"}[5m])
+
+# 查看每秒操作數
+rate(geode_operation_duration_seconds_count[1m])
+
+# 檢查快取連接狀態
+geode_cache_connected
+```
+
+**Prometheus 介面功能：**
+
+| 頁面 | 路徑 | 說明 |
+|------|------|------|
+| Graph | `/graph` | 執行 PromQL 查詢並視覺化 |
+| Targets | `/targets` | 查看抓取目標狀態 |
+| Alerts | `/alerts` | 查看警示規則 |
+| Status | `/status` | 系統狀態資訊 |
+
+#### Grafana 使用說明
+
+預配置的 Apache Geode Dashboard 包含：
+
+| 面板 | 指標 | 說明 |
+|------|------|------|
+| Customers Count | `geode_region_size{region="Customers"}` | 客戶資料筆數 |
+| Accounts Count | `geode_region_size{region="Accounts"}` | 帳戶資料筆數 |
+| Total Transactions | `geode_transactions_total` | 累計交易次數 |
+| Failed Transactions | `geode_transactions_failed` | 失敗交易次數 |
+| Operation Latency | `geode_operation_duration_seconds` | 讀寫延遲時序圖 |
+| Operations/sec | `rate(geode_operation_duration_seconds_count)` | 每秒操作數 |
+| JVM Memory | `jvm_memory_used_bytes` | JVM 記憶體使用 |
+| CQ Events | `geode_cq_events_total` | 持續查詢事件數 |
+
+**首次設定 Grafana：**
+
+1. 開啟 http://localhost:3000
+2. 使用 admin / admin 登入
+3. 新增 Prometheus 資料來源：
+   - Configuration → Data Sources → Add data source
+   - 選擇 Prometheus
+   - URL: `http://prometheus:9090`
+   - 點擊 Save & Test
+4. 匯入 Dashboard：
+   - Dashboards → Import
+   - 上傳 `monitoring/grafana-dashboard.json`
+
+#### 可用指標
+
+| 指標 | 類型 | 說明 |
+|------|------|------|
+| `geode_region_size` | Gauge | Region 中的項目數量 |
+| `geode_transactions_total` | Gauge | 交易總數 |
+| `geode_transactions_failed` | Gauge | 失敗交易數 |
+| `geode_operation_duration_seconds` | Timer | 讀寫操作延遲 (histogram) |
+| `geode_transaction_duration_seconds` | Timer | 交易執行時間 |
+| `geode_cq_events_total` | Gauge | CQ 事件總數 |
+| `geode_cache_connected` | Gauge | 快取連接狀態 (0/1) |
+
+#### JVM 標準指標
+
+透過 Micrometer 自動暴露的 JVM 指標：
 
 | 指標 | 說明 |
 |------|------|
-| `geode_region_size` | Region 中的項目數量 |
-| `geode_transactions_total` | 交易總數 |
-| `geode_transactions_failed` | 失敗交易數 |
-| `geode_operation_duration_seconds` | 讀寫操作延遲 |
-| `geode_cq_events_total` | CQ 事件總數 |
+| `jvm_memory_used_bytes` | JVM 記憶體使用量 |
+| `jvm_memory_max_bytes` | JVM 記憶體上限 |
+| `jvm_gc_pause_seconds` | GC 暫停時間 |
+| `jvm_threads_live_threads` | 活躍執行緒數 |
+| `process_cpu_usage` | CPU 使用率 |
 
 ```bash
 # 啟動完整監控堆疊
 docker-compose -f docker-compose-full.yaml up -d
 
-# Prometheus: http://localhost:9090
-# Grafana: http://localhost:3000 (admin/admin)
+# 或手動啟動各服務
+docker run -d --name prometheus --network geode-network -p 9090:9090 \
+  -v $(pwd)/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
+  prom/prometheus:latest
+
+docker run -d --name grafana --network geode-network -p 3000:3000 \
+  -e GF_SECURITY_ADMIN_PASSWORD=admin \
+  grafana/grafana:latest
 ```
 
 ---

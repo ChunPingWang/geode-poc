@@ -27,27 +27,33 @@ public class AccountBalanceCqListener implements CqListener {
     public void onEvent(CqEvent cqEvent) {
         Operation operation = cqEvent.getQueryOperation();
         Account newValue = (Account) cqEvent.getNewValue();
-        Account oldValue = (Account) cqEvent.getOldValue();
+        // Note: CqEvent doesn't provide oldValue directly in Geode
+        // We track previous balance in the event store if needed
 
         String eventType = mapOperationType(operation);
         log.debug("CQ Event: {} for account {}", eventType,
             newValue != null ? newValue.getAccountId() : "unknown");
 
-        BigDecimal oldBalance = oldValue != null ? oldValue.getBalance() : BigDecimal.ZERO;
-        BigDecimal newBalance = newValue != null ? newValue.getBalance() : BigDecimal.ZERO;
-        BigDecimal changeAmount = newBalance.subtract(oldBalance);
+        if (newValue == null) {
+            log.debug("Skipping event with null value");
+            return;
+        }
+
+        BigDecimal newBalance = newValue.getBalance();
+        // Get previous balance from event store if available
+        BigDecimal oldBalance = eventStore.getLastKnownBalance(newValue.getAccountId());
+        BigDecimal changeAmount = oldBalance != null ?
+            newBalance.subtract(oldBalance) : BigDecimal.ZERO;
 
         // Determine alert type
         String alertType = determineAlertType(newBalance, changeAmount);
 
         BalanceChangeEvent event = BalanceChangeEvent.builder()
             .eventId(UUID.randomUUID().toString())
-            .accountId(newValue != null ? newValue.getAccountId() :
-                       oldValue != null ? oldValue.getAccountId() : "unknown")
-            .customerId(newValue != null ? newValue.getCustomerId() :
-                        oldValue != null ? oldValue.getCustomerId() : "unknown")
+            .accountId(newValue.getAccountId())
+            .customerId(newValue.getCustomerId())
             .eventType(eventType)
-            .oldBalance(oldBalance)
+            .oldBalance(oldBalance != null ? oldBalance : BigDecimal.ZERO)
             .newBalance(newBalance)
             .changeAmount(changeAmount)
             .timestamp(LocalDateTime.now())
@@ -55,6 +61,7 @@ public class AccountBalanceCqListener implements CqListener {
             .build();
 
         eventStore.addEvent(event);
+        eventStore.updateLastKnownBalance(newValue.getAccountId(), newBalance);
 
         if (alertType != null) {
             log.warn("ALERT [{}]: Account {} - Balance: {}, Change: {}",

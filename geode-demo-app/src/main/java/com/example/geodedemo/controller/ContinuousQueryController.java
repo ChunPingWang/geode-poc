@@ -3,7 +3,6 @@ package com.example.geodedemo.controller;
 import com.example.geodedemo.cq.BalanceChangeEvent;
 import com.example.geodedemo.cq.ContinuousQueryService;
 import lombok.RequiredArgsConstructor;
-import org.apache.geode.cache.query.CqException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,7 +42,7 @@ public class ContinuousQueryController {
                 "success", true,
                 "message", "Account balance CQ registered"
             ));
-        } catch (CqException e) {
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
                 "success", false,
                 "error", e.getMessage()
