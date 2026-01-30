@@ -1,214 +1,192 @@
-# Apache Geode Proof of Concept
+# Apache Geode 概念驗證專案
 
-A comprehensive PoC project demonstrating Apache Geode's capabilities as a distributed in-memory data grid, integrated with Spring Boot microservices.
+展示 Apache Geode 作為分散式記憶體資料網格的功能，並整合 Spring Boot 微服務架構。
 
-## Table of Contents
+## 目錄
 
-- [About Apache Geode](#about-apache-geode)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [API Reference](#api-reference)
-- [Test Cases](#test-cases)
-- [Performance Targets](#performance-targets)
-
----
-
-## About Apache Geode
-
-### What is Apache Geode?
-
-Apache Geode is a distributed, in-memory data management platform that provides:
-
-- **Ultra-low latency**: Microsecond-level read/write operations
-- **High throughput**: Millions of operations per second
-- **Linear scalability**: Add nodes to increase capacity
-- **High availability**: Automatic failover with data redundancy
-- **Strong consistency**: ACID transactions across distributed data
-
-### Key Features
-
-| Feature | Description |
-|---------|-------------|
-| **In-Memory Data Grid** | Store and access data in memory across multiple nodes |
-| **Distributed Caching** | Cache-aside, read-through, write-through patterns |
-| **ACID Transactions** | Full transaction support across partitioned data |
-| **Continuous Queries (CQ)** | Real-time event notifications on data changes |
-| **WAN Replication** | Multi-datacenter replication for disaster recovery |
-| **PDX Serialization** | Language-independent serialization format |
-
-### Core Components
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Apache Geode Cluster                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐     Locators discover and coordinate       │
-│  │   Locator   │     cluster members. They maintain         │
-│  │             │     membership and load balancing.         │
-│  └─────────────┘                                            │
-│                                                             │
-│  ┌─────────────┐     Servers store data in Regions          │
-│  │   Server    │     (similar to tables). Data is           │
-│  │             │     partitioned and replicated across      │
-│  └─────────────┘     servers for high availability.         │
-│                                                             │
-│  ┌─────────────┐     Regions are named, distributed         │
-│  │   Region    │     data structures that hold key-value    │
-│  │             │     pairs with configurable policies.      │
-│  └─────────────┘                                            │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Region Types
-
-| Type | Description | Use Case |
-|------|-------------|----------|
-| **PARTITION** | Data split across nodes | Large datasets, scalability |
-| **PARTITION_REDUNDANT** | Partitioned with backup copies | High availability |
-| **REPLICATE** | Full copy on every node | Read-heavy, small datasets |
-| **LOCAL** | Single node only | Testing, temporary data |
+- [關於 Apache Geode](#關於-apache-geode)
+- [系統架構](#系統架構)
+- [專案結構](#專案結構)
+- [快速開始](#快速開始)
+- [API 參考](#api-參考)
+- [測試案例](#測試案例)
+- [效能指標](#效能指標)
 
 ---
 
-## Architecture
+## 關於 Apache Geode
 
-### System Overview
+### 什麼是 Apache Geode？
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          Docker Network                                  │
-│                                                                         │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                     Geode Cluster                                  │  │
-│  │                                                                    │  │
-│  │   ┌─────────────┐                                                  │  │
-│  │   │   Locator   │◄──── Cluster coordination & discovery            │  │
-│  │   │  Port:10334 │      JMX Manager: 1099                           │  │
-│  │   │  Pulse:7070 │      Web UI: http://localhost:7070/pulse         │  │
-│  │   └──────┬──────┘                                                  │  │
-│  │          │                                                         │  │
-│  │    ┌─────┴─────┐                                                   │  │
-│  │    │           │                                                   │  │
-│  │    ▼           ▼                                                   │  │
-│  │ ┌─────────┐ ┌─────────┐                                            │  │
-│  │ │Server-1 │ │Server-2 │◄──── Data nodes with PARTITION_REDUNDANT   │  │
-│  │ │Port:404 │ │Port:405 │      regions for high availability         │  │
-│  │ │         │ │         │                                            │  │
-│  │ │┌───────┐│ │┌───────┐│                                            │  │
-│  │ ││Custom-││ ││Custom-││      Customers & Accounts regions          │  │
-│  │ ││  ers  ││ ││  ers  ││      replicated across both servers        │  │
-│  │ │└───────┘│ │└───────┘│                                            │  │
-│  │ │┌───────┐│ │┌───────┐│                                            │  │
-│  │ ││Account││ ││Account││                                            │  │
-│  │ ││   s   ││ ││   s   ││                                            │  │
-│  │ │└───────┘│ │└───────┘│                                            │  │
-│  │ └─────────┘ └─────────┘                                            │  │
-│  │                                                                    │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-│                              ▲                                          │
-│                              │ Geode Client Protocol                    │
-│                              │                                          │
-│  ┌───────────────────────────┴───────────────────────────────────────┐  │
-│  │                    Spring Boot Application                         │  │
-│  │                                                                    │  │
-│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │  │
-│  │   │  REST API   │  │  Services   │  │ Repositories│               │  │
-│  │   │ Controllers │─▶│  (Business) │─▶│ (Geode)     │               │  │
-│  │   └─────────────┘  └─────────────┘  └─────────────┘               │  │
-│  │         ▲                                                          │  │
-│  │         │ HTTP :8080                                               │  │
-│  └─────────┼──────────────────────────────────────────────────────────┘  │
-│            │                                                            │
-└────────────┼────────────────────────────────────────────────────────────┘
-             │
-        ┌────┴────┐
-        │ Client  │  curl, Postman, Browser
-        └─────────┘
+Apache Geode 是一個分散式記憶體資料管理平台，提供：
+
+- **超低延遲**：微秒級的讀寫操作
+- **高吞吐量**：每秒數百萬次操作
+- **線性擴展**：新增節點即可增加容量
+- **高可用性**：自動故障轉移與資料冗餘
+- **強一致性**：跨分散式資料的 ACID 交易
+
+### 主要功能
+
+| 功能 | 說明 |
+|------|------|
+| **記憶體資料網格** | 在多個節點的記憶體中儲存和存取資料 |
+| **分散式快取** | 支援 Cache-aside、Read-through、Write-through 模式 |
+| **ACID 交易** | 跨分區資料的完整交易支援 |
+| **持續查詢 (CQ)** | 資料變更的即時事件通知 |
+| **WAN 複製** | 多資料中心複製，用於災難復原 |
+| **PDX 序列化** | 語言無關的序列化格式 |
+
+### 核心元件
+
+```mermaid
+graph TB
+    subgraph Geode叢集
+        L[Locator<br/>叢集協調者]
+        S1[Server 1<br/>資料節點]
+        S2[Server 2<br/>資料節點]
+
+        L --> S1
+        L --> S2
+        S1 <-.-> S2
+    end
+
+    subgraph Region區域
+        R1[Customers<br/>客戶資料]
+        R2[Accounts<br/>帳戶資料]
+    end
+
+    S1 --> R1
+    S1 --> R2
+    S2 --> R1
+    S2 --> R2
 ```
 
-### Data Flow
+**元件說明：**
 
+| 元件 | 說明 |
+|------|------|
+| **Locator** | 發現並協調叢集成員，維護成員資格和負載平衡 |
+| **Server** | 將資料儲存在 Region 中，資料會跨伺服器分區和複製 |
+| **Region** | 命名的分散式資料結構，保存具有可配置策略的鍵值對 |
+
+### Region 類型
+
+| 類型 | 說明 | 使用情境 |
+|------|------|----------|
+| **PARTITION** | 資料分散在各節點 | 大型資料集、可擴展性 |
+| **PARTITION_REDUNDANT** | 分區並有備份副本 | 高可用性 |
+| **REPLICATE** | 每個節點都有完整副本 | 讀取密集、小型資料集 |
+| **LOCAL** | 僅單一節點 | 測試、暫存資料 |
+
+---
+
+## 系統架構
+
+### 系統概觀
+
+```mermaid
+graph TB
+    subgraph Docker網路
+        subgraph Geode叢集
+            LOC[Locator<br/>Port: 10334<br/>JMX: 1099<br/>Pulse: 7070]
+            SRV1[Server-1<br/>Port: 40404]
+            SRV2[Server-2<br/>Port: 40405]
+
+            LOC --> SRV1
+            LOC --> SRV2
+        end
+
+        subgraph Spring_Boot應用程式
+            API[REST API<br/>Controllers]
+            SVC[Services<br/>業務邏輯]
+            REPO[Repositories<br/>Geode存取]
+
+            API --> SVC
+            SVC --> REPO
+        end
+
+        REPO -->|Geode Client| LOC
+    end
+
+    CLIENT[客戶端<br/>curl / Postman] -->|HTTP :8080| API
+    ADMIN[管理員] -->|HTTP :7070| LOC
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Cache-Aside Pattern                            │
-└──────────────────────────────────────────────────────────────────┘
 
-    Client Request
-          │
-          ▼
-    ┌───────────┐
-    │ REST API  │
-    └─────┬─────┘
-          │
-          ▼
-    ┌───────────┐     ┌─────────────────────────────────────┐
-    │  Service  │────▶│  1. Check Geode Cache               │
-    └─────┬─────┘     │  2. Cache Hit? Return data          │
-          │           │  3. Cache Miss? Query source        │
-          │           │  4. Store in cache                  │
-          ▼           │  5. Return data                     │
-    ┌───────────┐     └─────────────────────────────────────┘
-    │Repository │
-    └─────┬─────┘
-          │
-          ▼
-    ┌───────────┐
-    │  Geode    │
-    │  Cluster  │
-    └───────────┘
+### 資料流程
+
+```mermaid
+sequenceDiagram
+    participant C as 客戶端
+    participant API as REST API
+    participant SVC as Service
+    participant REPO as Repository
+    participant G as Geode Cache
+
+    C->>API: HTTP 請求
+    API->>SVC: 呼叫服務
+    SVC->>REPO: 查詢資料
+    REPO->>G: 檢查快取
+
+    alt 快取命中
+        G-->>REPO: 回傳資料
+    else 快取未命中
+        G-->>REPO: null
+        REPO->>G: 從來源載入並儲存
+        G-->>REPO: 回傳資料
+    end
+
+    REPO-->>SVC: 回傳資料
+    SVC-->>API: 回傳結果
+    API-->>C: HTTP 回應
 ```
 
-### Failover Architecture
+### 故障轉移架構
 
+```mermaid
+graph LR
+    subgraph 正常運作
+        direction TB
+        S1A[Server-1<br/>Key A: Primary<br/>Key B: Backup]
+        S2A[Server-2<br/>Key A: Backup<br/>Key B: Primary]
+        S1A <-.->|資料同步| S2A
+    end
+
+    subgraph Server-1故障後
+        direction TB
+        S1B[Server-1<br/>❌ 停機]
+        S2B[Server-2<br/>Key A: Primary ⬆️<br/>Key B: Primary]
+
+        style S1B fill:#ff6b6b
+        style S2B fill:#51cf66
+    end
+
+    正常運作 -->|故障轉移| Server-1故障後
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│              High Availability with PARTITION_REDUNDANT          │
-└─────────────────────────────────────────────────────────────────┘
 
-Normal Operation:
-┌─────────────┐     ┌─────────────┐
-│  Server-1   │     │  Server-2   │
-│             │     │             │
-│ ┌─────────┐ │     │ ┌─────────┐ │
-│ │ Key A   │ │     │ │ Key A   │ │  ◄── Primary on Server-1
-│ │(Primary)│ │     │ │(Backup) │ │      Backup on Server-2
-│ └─────────┘ │     │ └─────────┘ │
-│ ┌─────────┐ │     │ ┌─────────┐ │
-│ │ Key B   │ │     │ │ Key B   │ │  ◄── Primary on Server-2
-│ │(Backup) │ │     │ │(Primary)│ │      Backup on Server-1
-│ └─────────┘ │     │ └─────────┘ │
-└─────────────┘     └─────────────┘
+**故障轉移流程：**
 
-After Server-1 Failure:
-┌─────────────┐     ┌─────────────┐
-│  Server-1   │     │  Server-2   │
-│             │     │             │
-│   ╳ DOWN    │     │ ┌─────────┐ │
-│             │     │ │ Key A   │ │  ◄── Promoted to Primary
-│             │     │ │(Primary)│ │
-│             │     │ └─────────┘ │
-│             │     │ ┌─────────┐ │
-│             │     │ │ Key B   │ │  ◄── Still Primary
-│             │     │ │(Primary)│ │
-│             │     │ └─────────┘ │
-└─────────────┘     └─────────────┘
-                    All data accessible!
+```mermaid
+stateDiagram-v2
+    [*] --> 正常運作: 叢集啟動
+    正常運作 --> 偵測故障: Server-1 停止回應
+    偵測故障 --> 重新分配: Locator 偵測到
+    重新分配 --> 備份升級: Backup → Primary
+    備份升級 --> 服務恢復: 資料完整可用
+    服務恢復 --> 正常運作: Server-1 重新加入
 ```
 
 ---
 
-## Project Structure
+## 專案結構
 
 ```
 geode-poc/
-├── Apache_Geode_PoC_Workplan.md    # Detailed workplan
-├── docker-compose.yaml              # Geode cluster setup
-├── README.md                        # This file
+├── Apache_Geode_PoC_Workplan.md    # 詳細工作計畫
+├── docker-compose.yaml              # Geode 叢集設定
+├── README.md                        # 本文件
 │
-├── geode-demo-app/                  # Spring Boot application
+├── geode-demo-app/                  # Spring Boot 應用程式
 │   ├── Dockerfile
 │   ├── pom.xml
 │   └── src/main/java/com/example/geodedemo/
@@ -232,7 +210,7 @@ geode-poc/
 │           ├── ResourceNotFoundException.java
 │           └── GlobalExceptionHandler.java
 │
-└── k8s/                             # Kubernetes manifests
+└── k8s/                             # Kubernetes 部署檔
     ├── base/
     │   └── kind-config.yaml
     └── geode/
@@ -245,21 +223,21 @@ geode-poc/
 
 ---
 
-## Quick Start
+## 快速開始
 
-### Prerequisites
+### 前置需求
 
 - Docker 24.0+
 - Java 17+
 - Maven 3.9+
 
-### 1. Start Geode Cluster
+### 1. 啟動 Geode 叢集
 
 ```bash
-# Create network
+# 建立網路
 docker network create geode-network
 
-# Start Locator
+# 啟動 Locator
 docker run -d --name geode-locator --hostname locator \
   --network geode-network \
   -p 10334:10334 -p 1099:1099 -p 7070:7070 \
@@ -269,10 +247,10 @@ docker run -d --name geode-locator --hostname locator \
     --J=-Dgemfire.http-service-port=7070 \
     --J=-Dgemfire.enable-network-partition-detection=false && tail -f /dev/null'
 
-# Wait for locator (30 seconds)
+# 等待 Locator 啟動（約 30 秒）
 sleep 30
 
-# Start Server 1
+# 啟動 Server 1
 docker run -d --name geode-server1 --hostname server1 \
   --network geode-network -p 40404:40404 \
   apachegeode/geode:1.15.1 \
@@ -280,7 +258,7 @@ docker run -d --name geode-server1 --hostname server1 \
     --hostname-for-clients=server1 --server-port=40404 \
     --J=-Dgemfire.enable-network-partition-detection=false && tail -f /dev/null'
 
-# Start Server 2
+# 啟動 Server 2
 docker run -d --name geode-server2 --hostname server2 \
   --network geode-network -p 40405:40404 \
   apachegeode/geode:1.15.1 \
@@ -288,27 +266,27 @@ docker run -d --name geode-server2 --hostname server2 \
     --hostname-for-clients=server2 --server-port=40404 \
     --J=-Dgemfire.enable-network-partition-detection=false && tail -f /dev/null'
 
-# Wait for servers
+# 等待 Server 啟動
 sleep 20
 
-# Create regions
+# 建立 Region
 docker exec geode-locator gfsh -e "connect --locator=locator[10334]" \
   -e "create region --name=Customers --type=PARTITION_REDUNDANT" \
   -e "create region --name=Accounts --type=PARTITION_REDUNDANT"
 ```
 
-### 2. Build and Run Application
+### 2. 建置並執行應用程式
 
 ```bash
 cd geode-demo-app
 
-# Build
+# 建置
 mvn clean package -DskipTests
 
-# Build Docker image
+# 建立 Docker 映像
 docker build -t geode-demo-app:latest .
 
-# Run in Docker network
+# 在 Docker 網路中執行
 docker run -d --name geode-demo-app \
   --network geode-network \
   -p 8080:8080 \
@@ -316,18 +294,18 @@ docker run -d --name geode-demo-app \
   geode-demo-app:latest
 ```
 
-### 3. Verify
+### 3. 驗證
 
 ```bash
-# Health check
+# 健康檢查
 curl http://localhost:8080/api/health
 
-# Geode Pulse UI
+# Geode Pulse 管理介面
 open http://localhost:7070/pulse
-# Login: admin / admin
+# 登入：admin / admin
 ```
 
-### Cleanup
+### 清理環境
 
 ```bash
 docker rm -f geode-locator geode-server1 geode-server2 geode-demo-app
@@ -336,88 +314,105 @@ docker network rm geode-network
 
 ---
 
-## API Reference
+## API 參考
 
-### Health & Status
+### 健康狀態與系統資訊
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Application health status |
-| GET | `/api/regions` | List Geode regions |
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/health` | 應用程式健康狀態 |
+| GET | `/api/regions` | 列出 Geode Region |
 
-### Customers
+### 客戶管理
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/customers` | Create customer |
-| GET | `/api/customers` | List all customers |
-| GET | `/api/customers/{id}` | Get customer by ID |
-| PUT | `/api/customers/{id}` | Update customer |
-| DELETE | `/api/customers/{id}` | Delete customer |
-| GET | `/api/customers/email/{email}` | Find by email |
-| GET | `/api/customers/status/{status}` | Filter by status |
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/customers` | 建立客戶 |
+| GET | `/api/customers` | 列出所有客戶 |
+| GET | `/api/customers/{id}` | 依 ID 取得客戶 |
+| PUT | `/api/customers/{id}` | 更新客戶 |
+| DELETE | `/api/customers/{id}` | 刪除客戶 |
+| GET | `/api/customers/email/{email}` | 依 Email 查詢 |
+| GET | `/api/customers/status/{status}` | 依狀態篩選 |
 
-### Accounts
+### 帳戶管理
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/accounts` | Create account |
-| GET | `/api/accounts` | List all accounts |
-| GET | `/api/accounts/{id}` | Get account by ID |
-| GET | `/api/accounts/customer/{customerId}` | Get customer's accounts |
-| POST | `/api/accounts/{id}/deposit` | Deposit funds |
-| POST | `/api/accounts/{id}/withdraw` | Withdraw funds |
-| POST | `/api/accounts/transfer` | Transfer between accounts |
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/accounts` | 建立帳戶 |
+| GET | `/api/accounts` | 列出所有帳戶 |
+| GET | `/api/accounts/{id}` | 依 ID 取得帳戶 |
+| GET | `/api/accounts/customer/{customerId}` | 取得客戶的帳戶 |
+| POST | `/api/accounts/{id}/deposit` | 存款 |
+| POST | `/api/accounts/{id}/withdraw` | 提款 |
+| POST | `/api/accounts/transfer` | 帳戶間轉帳 |
 
 ---
 
-## Test Cases
+## 測試案例
 
-### Test Case 1: Basic CRUD Operations
+### 測試案例 1：基本 CRUD 操作
 
-**Objective**: Verify basic create, read, update, delete operations
+**目標**：驗證基本的新增、讀取、更新、刪除操作
 
 ```bash
-# Create a customer
+# 建立客戶
 curl -X POST http://localhost:8080/api/customers \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "phone": "1234567890",
-    "address": "123 Main St"
+    "name": "王小明",
+    "email": "ming@example.com",
+    "phone": "0912345678",
+    "address": "台北市信義區"
   }'
 
-# Expected: 201 Created with customer object including generated ID
+# 預期：201 Created，回傳包含自動產生 ID 的客戶物件
 
-# Read customer
+# 讀取客戶
 curl http://localhost:8080/api/customers/{customerId}
 
-# Expected: 200 OK with customer data
+# 預期：200 OK，回傳客戶資料
 
-# Update customer
+# 更新客戶
 curl -X PUT http://localhost:8080/api/customers/{customerId} \
   -H "Content-Type: application/json" \
   -d '{"phone": "0987654321"}'
 
-# Expected: 200 OK with updated customer
+# 預期：200 OK，回傳更新後的客戶
 
-# Delete customer
+# 刪除客戶
 curl -X DELETE http://localhost:8080/api/customers/{customerId}
 
-# Expected: 204 No Content
+# 預期：204 No Content
 ```
 
-**Result**: PASS
+**結果**：✅ 通過
 
 ---
 
-### Test Case 2: Account Operations
+### 測試案例 2：帳戶操作
 
-**Objective**: Verify deposit, withdraw, and transfer operations
+**目標**：驗證存款、提款和轉帳操作
+
+```mermaid
+sequenceDiagram
+    participant U as 使用者
+    participant A as 帳戶 A<br/>餘額: $1000
+    participant B as 帳戶 B<br/>餘額: $5000
+
+    U->>A: 存款 $500
+    Note over A: 餘額: $1500
+
+    U->>A: 提款 $200
+    Note over A: 餘額: $1300
+
+    U->>B: 轉帳 $300 到帳戶 A
+    Note over B: 餘額: $4700
+    Note over A: 餘額: $1600
+```
 
 ```bash
-# Create account with initial balance
+# 建立帳戶
 curl -X POST http://localhost:8080/api/accounts \
   -H "Content-Type: application/json" \
   -d '{
@@ -426,21 +421,21 @@ curl -X POST http://localhost:8080/api/accounts \
     "balance": 1000
   }'
 
-# Deposit
+# 存款
 curl -X POST http://localhost:8080/api/accounts/{accountId}/deposit \
   -H "Content-Type: application/json" \
   -d '{"amount": 500}'
 
-# Expected: Balance = 1500
+# 預期：餘額 = 1500
 
-# Withdraw
+# 提款
 curl -X POST http://localhost:8080/api/accounts/{accountId}/withdraw \
   -H "Content-Type: application/json" \
   -d '{"amount": 200}'
 
-# Expected: Balance = 1300
+# 預期：餘額 = 1300
 
-# Transfer
+# 轉帳
 curl -X POST http://localhost:8080/api/accounts/transfer \
   -H "Content-Type: application/json" \
   -d '{
@@ -449,149 +444,194 @@ curl -X POST http://localhost:8080/api/accounts/transfer \
     "amount": 300
   }'
 
-# Expected: Funds moved between accounts
+# 預期：資金在帳戶間移轉
 ```
 
-**Result**: PASS
+**結果**：✅ 通過
 
 ---
 
-### Test Case 3: Failover Test
+### 測試案例 3：故障轉移測試
 
-**Objective**: Verify data survives server failure
+**目標**：驗證伺服器故障時資料仍可存取
+
+```mermaid
+graph LR
+    subgraph 步驟1[1. 新增測試資料]
+        D1[建立客戶資料]
+    end
+
+    subgraph 步驟2[2. 驗證資料存在]
+        D2[查詢客戶列表]
+    end
+
+    subgraph 步驟3[3. 模擬故障]
+        D3[停止 Server-1]
+    end
+
+    subgraph 步驟4[4. 驗證資料可用]
+        D4[再次查詢客戶<br/>✅ 資料完整]
+    end
+
+    步驟1 --> 步驟2 --> 步驟3 --> 步驟4
+```
 
 ```bash
-# 1. Add test data
+# 1. 新增測試資料
 curl -X POST http://localhost:8080/api/customers \
   -H "Content-Type: application/json" \
-  -d '{"name": "Test User", "email": "test@example.com"}'
+  -d '{"name": "測試用戶", "email": "test@example.com"}'
 
-# 2. Verify data exists
+# 2. 驗證資料存在
 curl http://localhost:8080/api/customers
 
-# 3. Stop one server
+# 3. 停止一個伺服器
 docker stop geode-server1
 
-# 4. Wait for cluster to stabilize (10 seconds)
+# 4. 等待叢集穩定（10 秒）
 sleep 10
 
-# 5. Verify data is still accessible
+# 5. 驗證資料仍可存取
 curl http://localhost:8080/api/customers
 
-# Expected: All data still accessible via server2
+# 預期：所有資料仍可透過 server2 存取
 
-# 6. Restart server
+# 6. 重新啟動伺服器
 docker start geode-server1
 ```
 
-**Result**: PASS - Zero data loss during failover
+**結果**：✅ 通過 - 故障轉移期間零資料遺失
 
 ---
 
-### Test Case 4: Cluster Health Check
+### 測試案例 4：叢集健康檢查
 
-**Objective**: Verify cluster status via gfsh
+**目標**：透過 gfsh 驗證叢集狀態
 
 ```bash
-# Connect and list members
+# 連線並列出成員
 docker exec geode-locator gfsh \
   -e "connect --locator=locator[10334]" \
   -e "list members"
 
-# Expected:
+# 預期：
 # Member Count : 3
 # locator1 [Coordinator]
 # server1
 # server2
 
-# Check region status
+# 檢查 Region 狀態
 docker exec geode-locator gfsh \
   -e "connect --locator=locator[10334]" \
   -e "describe region --name=Customers"
 
-# Expected:
+# 預期：
 # Data Policy: partition
 # Hosting Members: server1, server2
 # redundant-copies: 1
 ```
 
-**Result**: PASS
+**結果**：✅ 通過
 
 ---
 
-### Test Case 5: Concurrent Operations
+### 測試案例 5：並發操作
 
-**Objective**: Verify system handles concurrent requests
+**目標**：驗證系統處理並發請求的能力
 
 ```bash
-# Run multiple requests in parallel
+# 並行執行多個請求
 for i in {1..10}; do
   curl -X POST http://localhost:8080/api/customers \
     -H "Content-Type: application/json" \
-    -d "{\"name\": \"User $i\", \"email\": \"user$i@example.com\"}" &
+    -d "{\"name\": \"用戶 $i\", \"email\": \"user$i@example.com\"}" &
 done
 wait
 
-# Verify all customers created
+# 驗證所有客戶都已建立
 curl http://localhost:8080/api/customers | jq length
 
-# Expected: 10 customers
+# 預期：10 個客戶
 ```
 
-**Result**: PASS
+**結果**：✅ 通過
 
 ---
 
-### Test Case 6: Invalid Operations
+### 測試案例 6：錯誤處理
 
-**Objective**: Verify proper error handling
+**目標**：驗證正確的錯誤處理
+
+```mermaid
+graph TD
+    subgraph 錯誤情境
+        E1[查詢不存在的客戶] --> R1[404 Not Found]
+        E2[提款超過餘額] --> R2[400 Bad Request<br/>餘額不足]
+        E3[無效的轉帳] --> R3[404 Not Found<br/>帳戶不存在]
+    end
+```
 
 ```bash
-# Get non-existent customer
+# 取得不存在的客戶
 curl http://localhost:8080/api/customers/invalid-id
 
-# Expected: 404 Not Found
+# 預期：404 Not Found
 
-# Withdraw more than balance
+# 提款超過餘額
 curl -X POST http://localhost:8080/api/accounts/{accountId}/withdraw \
   -H "Content-Type: application/json" \
   -d '{"amount": 999999}'
 
-# Expected: 400 Bad Request - Insufficient balance
+# 預期：400 Bad Request - 餘額不足
 
-# Invalid transfer
+# 無效的轉帳
 curl -X POST http://localhost:8080/api/accounts/transfer \
   -H "Content-Type: application/json" \
   -d '{"fromAccountId": "invalid", "toAccountId": "invalid", "amount": 100}'
 
-# Expected: 404 Not Found
+# 預期：404 Not Found
 ```
 
-**Result**: PASS
+**結果**：✅ 通過
 
 ---
 
-## Performance Targets
+## 效能指標
 
-| Metric | Target | Notes |
-|--------|--------|-------|
-| Read Latency (P99) | < 1ms | Single key lookup |
-| Write Latency (P99) | < 5ms | Single key insert/update |
-| Batch Read (100 keys) | < 10ms | getAll operation |
-| Throughput | > 10,000 TPS | Per server node |
-| Failover Time | < 10s | Automatic recovery |
-| Data Loss | 0 | With redundant copies |
+```mermaid
+graph LR
+    subgraph 延遲目標
+        R[讀取延遲<br/>P99 < 1ms]
+        W[寫入延遲<br/>P99 < 5ms]
+        B[批次讀取<br/>100筆 < 10ms]
+    end
+
+    subgraph 可用性目標
+        T[吞吐量<br/>> 10,000 TPS]
+        F[故障轉移<br/>< 10 秒]
+        D[資料遺失<br/>0]
+    end
+```
+
+| 指標 | 目標 | 備註 |
+|------|------|------|
+| 讀取延遲 (P99) | < 1ms | 單一鍵值查詢 |
+| 寫入延遲 (P99) | < 5ms | 單一鍵值新增/更新 |
+| 批次讀取 (100 筆) | < 10ms | getAll 操作 |
+| 吞吐量 | > 10,000 TPS | 每個伺服器節點 |
+| 故障轉移時間 | < 10 秒 | 自動恢復 |
+| 資料遺失 | 0 | 使用冗餘副本 |
 
 ---
 
-## References
+## 參考資源
 
-- [Apache Geode Documentation](https://geode.apache.org/docs/)
+- [Apache Geode 官方文件](https://geode.apache.org/docs/)
 - [Spring Data Geode](https://spring.io/projects/spring-data-geode)
-- [Geode GitHub Repository](https://github.com/apache/geode)
+- [Geode GitHub 儲存庫](https://github.com/apache/geode)
 
 ---
 
-## License
+## 授權
 
-This project is for demonstration purposes only.
+本專案僅供展示用途。
